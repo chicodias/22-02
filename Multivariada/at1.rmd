@@ -1,0 +1,40 @@
+---
+title: "Atividade 1 - Multivariada"
+author: Francisco Miranda - 4402962
+output: pdf_document
+---
+
+Exercicios para entrega em 15/09/2022
+
+```{R}
+# bibliotecas utilizadas
+library(tidyverse)
+library(ggExtra)
+```
+
+## Exercício 1.4
+
+Carregamos o conjunto de dados com as 10 maiores empresas do mundo
+
+```{R}
+dat14 <- read_delim("data/companies.csv", ";")
+```
+
+```{R}
+dat14 |> ggplot() + geom_point(aes(x = sales, y = profits))
+```
+
+
+Calculo de 
+
+
+## Exercicio 1.5
+
+## Exercicio 1.22
+
+## Exercicio 3
+
+## Exercicio 6
+
+## Exercicio 7
+
