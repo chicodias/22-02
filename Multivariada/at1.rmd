@@ -1,40 +1,178 @@
 ---
-title: "Atividade 1 - Multivariada"
-author: Francisco Miranda - 4402962
-output: pdf_document
+title: "SME0822 - Análise Multivariada e Aprendizado Não-Supervisionado"
+subtitle: "Atividade 1"
+author: Francisco Rosa Dias de Miranda - 4402962
+output: bookdown::pdf_document2
+date: Setembro 2022
 ---
 
-Exercicios para entrega em 15/09/2022
 
-```{R}
-# bibliotecas utilizadas
+```{R }
+# Bibliotecas do R utilizadas
+library(bookdown)
+library(pander)
 library(tidyverse)
 library(ggExtra)
+library(ggpubr)
+library(knitr)
+```
+
+```{R include = FALSE}
+write_matex2 <- function(x) {
+  begin <- "\\begin{bmatrix}"
+  end <- "\\end{bmatrix}"
+  X <-
+    apply(x, 1, function(x) {
+      paste(
+        paste(x, collapse = "&"),
+        "\\\\"
+      )
+    })
+  paste(c(begin, X, end), collapse = "")
+}
 ```
 
 ## Exercício 1.4
 
-Carregamos o conjunto de dados com as 10 maiores empresas do mundo
-
 ```{R}
-dat14 <- read_delim("data/companies.csv", ";")
+dat14 <- read_delim("data/companies.csv", ";", show_col_types = F)
 ```
 
-```{R}
-dat14 |> ggplot() + geom_point(aes(x = sales, y = profits))
+Carregamos o conjunto de dados com o lucro e total de vendas das 10 maiores empresas do mundo. A partir do gráfico na Figura \@ref(fig:graf1) nota-se uma relação aparentemente linear entre as variáveis.
+
+```{R graf1, out.height="35%", fig.cap = "Scatter plot com distribuição marginal do lucro e vendas das 10 maiores empresas do mundo", fig.align="center" }
+
+p <- dat14 |> ggplot(aes(x = sales, y = profits)) +
+  geom_point() +
+  labs(x= "Vendas (bilhões)", y = "Lucro (bilhões)",
+       title = "Lucros versus quantidade de vendas" ) +
+  theme_pubr()
+  ggMarginal(p,type = "histogram")
 ```
 
+Vamos agora obter algumas medidas descritivas das variáveis lucro e vendas. Na Tabela \@ref{tab1} temos as médias, covariâncias e coeficiente de correlação linear de Pearson.
 
-Calculo de 
+O valor de $r$ obtido indica-nos uma forte associação linear entre as variáveis lucro e vendas, conforme havíamos sugerido a partir dos indícios gráficos da Figura \@ref{graf1}.
 
+```{R tab1}
 
+dat14 |> select(sales, profits) |>
+  summarise("$\\bar{x_1}$" = mean(sales),"$\\bar{x_2}$" = mean(profits),
+            "$s_{11}$" = var(sales), "$s_{22}$" = var(profits),
+            "$s_{12}$" = cov(sales,profits), "$r_{12}$" = cor(sales,profits)) |>
+  kable(caption = "Médias e covariâncias das 10 maiores empresas do mundo")
+```
 ## Exercicio 1.5
 
+Vamos agora estudar a associação entre o total de recursos de cada empresa ($x_3$) e as variáveis do exercício anterior. A Figura \@ref{graf2} sugere-nos um padrão de dispersão linear com correlação negativa, que investigaremos adiante.
+
+```{R graf2, out.height="35%", fig.cap = "Scatter plot com distribuição marginal do lucro e vendas das 10 maiores empresas do mundo", fig.align="center"  }
+
+dat14 |> select(!Company) |>
+  pivot_longer(cols = !"assets") |>
+  ggplot(aes(y = assets)) +
+  geom_point(aes(x = value)) +
+  facet_wrap(~name, scales = "free_x") +
+  theme_pubclean()
+```
+
+```{R}
+vars <- dat14 |> select(!Company)
+
+# Vetor de Medias
+xbar <- vars |> map(~mean(.))
+# Matriz de covariâncias S
+S <- cov(vars)
+# Matriz de correlações de Pearson
+R <- cor(vars)
+```
+
+Dessa forma, obtemos: 
+
+$$\boldsymbol{\bar{x}} = `r write_matex2(as.matrix(xbar))`$$
+$$\boldsymbol{S_{n}} = `r write_matex2(round(S, 2))`$$
+$$\boldsymbol{R} = `r write_matex2(round(R,4))`$$
+
+  
 ## Exercicio 1.22
+
+```{R}
+data22 <- read_delim("data/oxygen.csv")
+a<- data22[c(2,3,4)]
+```
+
+A partir do gráfico 3d, podemos visualizar dois outliers nos cantos do plot.
+
+```{R graph3d, out.height="50%", fig.caption= "Associação entre x1, x2 e x3, com a cor em x4."}
+
+library(gg3D)
+
+data22 |>  
+  ggplot(aes(x=x1, y=x2, z=x3, color = x4)) + 
+  theme_void() +
+  axes_3D() +
+    stat_3D() +
+      labs_3D(
+    labs=c("x1", "x2", "x3"),
+    hjust=c(0,1,1), vjust=c(1, 1, -0.2), angle=c(0, 0, 90)) 
+
+```
 
 ## Exercicio 3
 
+```{R}
+
+data3 <- matrix(c( 60, 10, 6, 24, 
+                    100, 24, 6, 30, 
+                    150, 100, 20, 40, 
+                    350, 80,60,50), 4, 4)
+
+dimnames(data3) = list(
+  exame = c("Sangue", "Endoscopia", "Eletrocardiograma", "Outros"),
+  idade = c("<18", "18-30", "30-45", "> 45")
+  )
+
+```
+
+Podemos visualizar graficamente a associação entre Exame e Idade ao plotarmos um gráfico de mosaico com as duas variáveis, na Figura \@ref{graph3}.
+
+```{R graph3,out.height="35%", fig.caption= "Gráfico de mosaico entre Idade e Exame"}
+mosaicplot(data3)
+```
+
+O teste qui-quadrado é um teste estatístico que verifica o quão distante os valores observados estão dos esperados sob independência. Na tabela \@ref{tab3} Obtivemos um p-valor menor do que 0.05, dessa forma rejeitamos a hipótese nula, de independência entre as variáveis.
+
+Assim, a um nível de significância de 5\% podemos concluir que existe associação entre as variáveis Exame e Idade.
+
+
+```{R tab3}
+
+pander(chisq.test(as.table(data3)),
+      caption = "Teste de independência entre as variáveis Exame e Idade")
+
+```
+
+O Coeficiente T de Tschuprow é uma medida de associação entre duas variáveis nominais entre 0 e 1. Na Tabela 2 Obtivemos $T = 0,15$, que indica uma associação fraca entre as variáveis Exame e Idade. 
+
+
+```{R tab2} 
+
+library(DescTools)
+
+TschuprowT(data3)
+
+```
+
+
 ## Exercicio 6
 
-## Exercicio 7
+A partir dos coeficientes de $Q(x_1, x_2, x_3)$ obtemos
+
+```{R}
+M <- matrix(c( 2, -1, 2,
+              -1, 1, 0,
+              2, 0, -3), 3,3, byrow = T)
+```
+
+$$A = `r write_matex2(M)`$$
 
