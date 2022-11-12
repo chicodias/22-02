@@ -1,0 +1,210 @@
+#+TITLE: SME0822 - Análise Multivariada e Aprendizado Não Supervisionado
+#+EMAIL: francisco.miranda@usp.br
+
+* Atividade 3 - Francisco Miranda - 4402962
+
+#+begin_src R :session m
+# bibliotecas utilizadas
+library(tidyverse)
+library(ggExtra)
+library(ascii)
+library(multcomp)
+options(asciiType = "org")
+library(jocre)
+library('rockchalk')
+library(MVTests)
+#+end_src
+
+** Exercício 2
+
+Carregamos o conjunto de dados que representa uma amostra aleatória de tamanho 42 observada, da qual temos o vetor de médias e a matrix de variância covariância.
+
+#+begin_src R :session m
+
+n <- 42
+mu <- c(0.564, 0.603)
+S <- matrix(c(0.0144, 0.0117, 0.0117, 0.0146), ncol = 2)
+
+#+end_src
+
+#+RESULTS:
+| 0.0144 | 0.0117 |
+| 0.0117 | 0.0146 |
+
+
+** (b) região de confiança para o vetor de médias
+
+Encontramos a região de 95% de confiança para $\mu$ com auxílio da função pacote `m̀vrnorm`
+
+
+#+begin_src R :session m :results output org :exports both
+data <- mvrnorm(n= n,
+       mu=mu,
+       Sigma=S
+       )
+
+
+cset(data, method = "hotelling", alpha = 0.05)
+
+#+end_src
+
+#+RESULTS:
+#+begin_src org
+Parameter estimates and projected boundaries of the 2-dimensional
+95% simultaneous confidence region:
+
+     Estimate Lower Upper
+[1,]    0.556 0.510 0.602
+[2,]    0.596 0.548 0.645
+#+end_src
+
+** (e) Testes de hipótese
+
+#+begin_src R :session m :results output org :exports both
+test <- OneSampleHT2(data, mu=c(0.6,0.58))
+summary(test)
+
+#+end_src
+
+#+RESULTS:
+#+begin_src org
+       One Sample Hotelling T Square Test
+
+Hotelling T Sqaure Statistic = 14.51081
+ F value = 7.078 , df1 = 2 , df2 = 40 , p-value: 0.00233
+
+   	              Descriptive Statistics
+
+            [,1]       [,2]
+N     42.0000000 42.0000000
+Means  0.5759174  0.5933633
+Sd     0.1366825  0.1414438
+
+
+  	            Detection important variable(s)
+
+     Lower     Upper  Mu0 Important Variables?
+1 0.521632 0.6302027 0.60                FALSE
+2 0.537187 0.6495397 0.58                FALSE
+#+end_src
+
+** Exercício 4
+
+Vamos avaliar se há diferença estatisticamente significante entre as variáveis do conjunto de dados `iris`. Iniciamos nossa análise observando a distribuições dos tamanhos de sépala e pétala de acordo com a espécie.
+
+#+BEGIN_SRC R :file boxpl1.png :session m :results graphics file :exports both
+
+iris |> pivot_longer(cols = !"Species") |>
+  ggplot(aes(x = Species, y = value, fill = Species)) +
+  geom_boxplot() +
+  facet_wrap(~name)
+#+end_src
+
+#+RESULTS:
+[[file:boxpl1.png]]
+
+Vamos tentar captar as diferenças significativas entre os três grupos através do teste MANOVA. Nossas hipóteses são:
+
+$h_0$ não existem diferenças significativas entre as médias dos grupos, versus
+
+$h_a$:* a média de pelo menos um dos grupos é diferente das demais.
+
+#+begin_src R :session m :results output :exports both :results output
+
+fit <- manova(
+  cbind(Sepal.Length, Sepal.Width, Petal.Length, Petal.Width)
+     ~ Species, data = iris)
+
+print(summary(fit))
+#+end_src
+
+#+RESULTS:
+:            Df Pillai approx F num Df den Df    Pr(>F)
+: Species     2 1.1919   53.466      8    290 < 2.2e-16 ***
+: Residuals 147
+: ---
+: Signif. codes:  0 ‘***’ 0.001 ‘**’ 0.01 ‘*’ 0.05 ‘.’ 0.1 ‘ ’ 1
+
+O valor-p obtido rejeita a hipótese nula para um nível de significância de 5%. Logo, existem diferenças entre as médias das variáveis estudadas entre as espécies de flor.
+
+
+** Exercicio 5.9
+
+Carregamos o conjunto de dados com medidas de 61 ursos do Alaska.
+
+
+#+begin_src R :session m :results output
+M <- matrix(c(3266.46, 1343.97, 731.54, 1175.50, 162.68, 238.37,
+              1343.97, 721.91, 324.25, 537.35, 80.17, 117.73,
+              731.54, 324.25, 179.28, 281.17, 39.15, 56.80,
+              1175.50, 537.35, 281.17, 474.98, 63.73, 94.85,
+              162.68, 80.17, 39.15, 63.73, 9.95, 13.88,
+              238.37, 117.73, 56.80, 94.85, 13.88, 21.26),
+            nrow = 6, ncol = 6, byrow = T)
+colnames(M) <- c("Peso","Comprimento Corporal","Pescoco",
+                 "Perímetro", "Comprimento Cabeca", "Largura Cabeca")
+mu <- c(95.52, 164.38, 55.69, 93.39, 17.98, 31.13)
+n <- 61
+p <- 6
+#+end_src
+
+#+RESULTS:
+: 6
+
+*** (a) Intervalos de 95% de confiança simultâneos para as seis medidas
+
+
+#+begin_src R :session m :results output :exports both
+
+# Intervalos  simulatânea de 95% de confiança
+
+crit <- qf(0.05, p, n - p, lower.tail = F)
+# Máximo erro
+E <- sqrt((n-1)*p*crit/(n-p))* sqrt(diag(M)/n)
+# intervals
+LI = mu -  E
+LS = mu +  E
+
+Res=cbind(mu, LI, LS)
+colnames(Res)=c("D_bar", "LI","LS")
+print(Res, digits = 3, type = "org")
+#+end_src
+
+#+RESULTS:
+:      D_bar    LI    LS
+: [1,]  95.5  67.3 123.7
+: [2,] 164.4 151.1 177.6
+: [3,]  55.7  49.1  62.3
+: [4,]  93.4  82.6 104.1
+: [5,]  18.0  16.4  19.5
+: [6,]  31.1  28.9  33.4
+
+*** (c) Intervalos de 95% de confiança de Bonferroni simultâneos para as seis medidas
+
+
+#+begin_src R :session m :results output org :exports both
+
+##################################################
+# Intervalos  de 95% de confiança de Bonferroni
+##################################################
+
+crit <- qt(0.05/(2*4), n-1, lower.tail = F)
+# Máximo erro
+E <- crit* sqrt(diag(M)/n)
+# intervals
+LI = mu -  E
+LS = mu +  E
+
+Res=cbind(mu, LI, LS)
+colnames(Res)=c("D_bar", "LI","LS")
+print(Res,digits=3, type = "org")
+#+end_src
+
+#+RESULTS:
+|  95.52 | 76.6752410837607 | 114.364758916239 |
+| 164.38 | 155.520821696881 | 173.239178303119 |
+|  55.69 | 51.2751308586459 | 60.1048691413541 |
+|  93.39 | 86.2039609111859 | 100.576039088814 |
+|  17.98 | 16.9399278820849 | 19.0200721179151 |
+|  31.13 | 29.6096851284056 | 32.6503148715944 |
+

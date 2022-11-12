@@ -1,0 +1,141 @@
+---
+title: "SME0823 - Modelos de Regressão e Aprendizado Supervisionado 2  Trabalho 2"
+author:
+  - Aimê Gomes da Nobrega (11882429)
+  - Francisco Rosa Dias de Miranda (4402962)
+output: pdf_document
+---
+
+```{r packages}
+library(tidyverse)
+library(gamlss)
+library(gridExtra)
+# Separador decimal nos resultados: ","
+options(OutDec = ",")
+set.seed(13)
+```
+## Parte 1
+
+Os resíduos têm importância vital na checagem do ajuste de um modelo. No modelo Normal, eles têm distribuição Normal e podem ser padronizados a fim de obter-se variâncias iguais. 
+
+Já em situações de regressão não-normal, a definição usual de resídous não garante que eles possuam essa propriedade, o que cria um problema particular quando distribuições discretas são utilizadas.
+
+Como forma de sanar esse problema, existem outras definições de resíduo, como o **resíduo de quantil**, uma forma mais generalizada que permite que os resíduos tenham distribuição normal sob a condição de um bom ajuste, seja qual for a distribuição da variável resposta.
+
+### Gerando a amostra
+
+Sendo $\eta_i = \beta_0 + \beta_1 x_i$ nosso preditor linear e $logit(.)$ a função logística, que é estritamente crescente. Dessa forma podemos fazer
+
+$$\log{\left(\frac{p_{i}}{1-p_{i}}\right)} = \beta_0 + \beta_1 x_i \Rightarrow p_i = \frac{exp{\left(\beta_0 + \beta_1 x_i\right) }}{1 + \exp{\left( \beta_0 + \beta_1 x_i\right) }}$$
+
+Por comodidade, a inversa da função logito encontra-se implementada em R através da função do pacote base `plogis()`. Vamos gerar duas amostras aleatórias de forma similar à utilizada pelos autores do artigo, uma de tamanho 25 e outra com tamanho 60.
+
+A variável explicativa foi gerada como sendo pertencente a uma distribuição Normal Padrão. Transformamos esse valor em uma probabilidade através da implementação descrita acima. O algoritmo pode ser descrito da seguinte forma:
+
+    para $i = 1, ..., n$
+        gere $x_i \sim \mathcal{N}(0,1)$
+        calcule $p_i = logit^{-1}(x_i^2)$
+        gere $y_i \sim \mathcal{BI}(3, p_i)$
+
+```{r gen-bin, out.height="85%", fig.cap = "Dados gerados a partir de uma N(0,1)"}
+n_i <- c(25, 60)
+# map é equivalente à função apply()
+x_i <- n_i |> map(~rnorm(.))
+# aqui, beta_0 = 0 e beta_1 = 1.
+p_i <- x_i |> map(~plogis(.))
+
+smp <- 1:2 |> map(~tibble(x = x_i[[.]],
+                          y =  rbinom(n_i[.], 3, p_i[[.]]^2)))
+
+# Vamos visualizar os pares (x, y) gerados através de scatterplots
+1:2 |> map(~ {ggplot(smp[[.]], aes(x = x, y = y)) + geom_point()})
+```
+
+Ajustamos um modelo logístico de resposta binomial com auxílio do pacote `gamlss` para obter os respectivos resíduos do modelo.
+
+### Ajuste do modelo
+
+```{r sim-fit}
+dat <- smp[[2]]
+n <- 3
+# The response variable should be a matrix containing two columns, the first with the count  of successes and the second with the count of failures
+dat$y <- with(dat, cbind(y, n - y))
+fit1 <- gamlss(y ~ x, family = BI, data = dat)
+
+
+res <- tibble(dat,
+              res_qnt = residuals(fit1),
+              res_dev = residuals(fit1, "mu"))
+
+res |> ggplot(aes(x = x, y = res_dev)) + geom_point()
+
+res |> ggplot(aes(x = x, y = res_qnt)) + geom_point()
+
+```
+
+ - Ajustar modelo quadratico
+ - envelope dos residuos
+
+
+
+## Parte 2 
+
+Utilizando dados de um estudo prospectivo com 100 idosos em boa condição física, vamos ajustar um modelo a fim de tentar relacionar o número de quedas de um paciente com as variaveis explicativas presentes em nosso conjunto de dados, a se saber:
+
+   - `ìntervencao`: houveram exercícios físicos junto à educação(0=não, 1=sim),
+   - `sexo`: 0= feminino, 1= masculino,
+   - `balanco`: escore de balanço de um indivíduo, 
+   - `forca`: escore de força de um indivído.
+
+
+```{r part2}
+df2 <- read.table("geriatra.dat")
+colnames(df2) <- c("quedas", "intervencao", "sexo", "balanco", "forca")
+# TODO: análise exploratória, pelo menos um gráfico ou tabela de cada uma das variáveis explicativas
+```
+
+A primeira etapa de nossa análise é exploratória. Vamos verificar o comportamento das variáveis em nosso conjunto de dados. As variáveis `sexo` e `intervencao` são binárias, enquanto que as outras são quantitativas discretas.
+
+
+```{r EDA-1, fig.cap = "Gráfico de barras com a contagem da variável resposta", out.height = "80%" }
+df2 |> ggplot(aes(x = quedas)) +
+#  geom_dotplot(binwidth =  0.5) +
+  geom_bar(stat = "count") +
+  labs(x = "Número de quedas", y = "Quantidade de observações",
+       title = "Contagem do número de quedas") +
+  theme_light()
+```
+
+Através do gráfico de barras da figura acima, aparentemente a distribuição de Poisson faz sentido para os dados, devido à distribuição da variável resposta ser positiva discreta. 
+
+Utilizando o pacote `gamlss`, definimos a função de ligação de nosso modelo como sendo a função `log`.
+
+Da mesma forma, uma primeira tentativa seria ajustar uma distribuição de Poisson para a resposta. Entretanto, devemos, via análise de resíduos, verificar se nossa suposição é válida, pois para uma distribuição de Poisson, a média e a variância devem ser iguais.
+
+
+
+```{r model-fit}
+fit2 <- gamlss(quedas ~ ., family = PO(), data = df2)
+summary(fit2)
+```
+
+
+```{r model-fit3}
+fit4 <- gamlss(quedas ~ ., family = NBI(), data = df2)
+summary(fit4)
+```
+
+
+
+Utilizando o AIC como critério de seleção de modelos, faremos uma seleção de variáveis backward.
+
+```{r backwards-fit}
+m1 <- stepGAIC(fit2)
+```
+
+Nossa seleção backwards removeu a variável `sexo` do modelo de Poisson, pois a variável foi rejeitada no teste de hipóteses anteriormente realizado pelo sumário do modelo como sendo não importante para explicar a variabilidade da variável resposta.
+
+Dessa forma, o número médio de quedas aparenta ser independente em relação ao sexo do paciente. Portanto, o sexo não parece interferir no número médio de quedas de um paciente.
+
+
+
