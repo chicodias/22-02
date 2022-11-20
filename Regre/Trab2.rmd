@@ -6,17 +6,19 @@ author:
 output: pdf_document
 ---
 
-```{r packages}
+```{r packages, message = F}
 library(tidyverse)
 library(gamlss)
+library(hnp)
 library(gridExtra)
 # Separador decimal nos resultados: ","
 options(OutDec = ",")
 set.seed(13)
 ```
+
 ## Parte 1
 
-Os resíduos têm importância vital na checagem do ajuste de um modelo. No modelo Normal, eles têm distribuição Normal e podem ser padronizados a fim de obter-se variâncias iguais. 
+Os resíduos têm importância vital na checagem do ajuste de um modelo. No modelo Normal, eles têm distribuição Normal e podem ser padronizados a fim de obter-se variâncias iguais.
 
 Já em situações de regressão não-normal, a definição usual de resídous não garante que eles possuam essa propriedade, o que cria um problema particular quando distribuições discretas são utilizadas.
 
@@ -26,67 +28,213 @@ Como forma de sanar esse problema, existem outras definições de resíduo, como
 
 Sendo $\eta_i = \beta_0 + \beta_1 x_i$ nosso preditor linear e $logit(.)$ a função logística, que é estritamente crescente. Dessa forma podemos fazer
 
-$$\log{\left(\frac{p_{i}}{1-p_{i}}\right)} = \beta_0 + \beta_1 x_i \Rightarrow p_i = \frac{exp{\left(\beta_0 + \beta_1 x_i\right) }}{1 + \exp{\left( \beta_0 + \beta_1 x_i\right) }}$$
+$$
+\log{ \left( \frac {p_i} {1-p_i} \right) } =
+ \beta_0 + \beta_1 x_i \Rightarrow p_i = \frac{exp{\left(\beta_0 + \beta_1 x_i\right) }}{1 + \exp{\left( \beta_0 + \beta_1 x_i\right)}}
+$$
 
-Por comodidade, a inversa da função logito encontra-se implementada em R através da função do pacote base `plogis()`. Vamos gerar duas amostras aleatórias de forma similar à utilizada pelos autores do artigo, uma de tamanho 25 e outra com tamanho 60.
+Vamos gerar duas amostras aleatórias de forma similar à utilizada pelos autores do artigo, uma de tamanho 25 e outra com tamanho 60.
 
-A variável explicativa foi gerada como sendo pertencente a uma distribuição Normal Padrão. Transformamos esse valor em uma probabilidade através da implementação descrita acima. O algoritmo pode ser descrito da seguinte forma:
+A variável explicativa foi gerada como sendo pertencente a uma distribuição Uniforme. Transformamos esse valor em uma probabilidade através da implementação descrita abaixo.
 
-    para $i = 1, ..., n$
-        gere $x_i \sim \mathcal{N}(0,1)$
-        calcule $p_i = logit^{-1}(x_i^2)$
-        gere $y_i \sim \mathcal{BI}(3, p_i)$
+```{r gen-bin, out.height="50%"}
+# inversa da logito
+logito_inv <- (function(x) exp(x) / (1 + exp(x)))
 
-```{r gen-bin, out.height="85%", fig.cap = "Dados gerados a partir de uma N(0,1)"}
-n_i <- c(25, 60)
-# map é equivalente à função apply()
-x_i <- n_i |> map(~rnorm(.))
-# aqui, beta_0 = 0 e beta_1 = 1.
-p_i <- x_i |> map(~plogis(.))
+# gera duplas (x_i, y_i), i = 1,...n
+# X ~ unif(alfa, beta)
+# p = A + BX + CX^2
+# Y ~ bin(theta, p)
+gera_xy <- function(n){
+  x <- runif(n, -0.25, 0.25)
+  p <- (0 + 1*x + 60*x^2) |>
+    map_dbl(~logito_inv(.))
 
-smp <- 1:2 |> map(~tibble(x = x_i[[.]],
-                          y =  rbinom(n_i[.], 3, p_i[[.]]^2)))
+  y <- rbinom(n, 3, p)
+  tibble(x, p, y)
+}
+
+smp <- c(25,60) |> map_dfr(~tibble(gera_xy(.),
+                                   n_sample = .))
 
 # Vamos visualizar os pares (x, y) gerados através de scatterplots
-1:2 |> map(~ {ggplot(smp[[.]], aes(x = x, y = y)) + geom_point()})
+smp |> ggplot(aes(x = x, y = y)) +
+  geom_point() +
+  facet_wrap(~n_sample) +
+  theme_gray()
 ```
 
-Ajustamos um modelo logístico de resposta binomial com auxílio do pacote `gamlss` para obter os respectivos resíduos do modelo.
+### Ajuste do modelo linear simples
 
-### Ajuste do modelo
+Com auxílio do pacote `gamlss`, vamos ajustar um modelo logístico de resposta binomial (a ligação logística é o _default_) para obter os respectivos resíduos do modelo.
 
-```{r sim-fit}
-dat <- smp[[2]]
-n <- 3
-# The response variable should be a matrix containing two columns, the first with the count  of successes and the second with the count of failures
-dat$y <- with(dat, cbind(y, n - y))
-fit1 <- gamlss(y ~ x, family = BI, data = dat)
+```{r sim-fit, out.height = "40%" }
+# a variavel resposta deve ser uma matriz com duas
+# colunas, o numero de sucessos e o numero de fracassos
+# de cada valor simulado.
+r <- 3
+smp$y <- with(smp, cbind(y, r - y))
 
+ajusta_glm_bi <- function(data, form){
+  gamlss(form, family = BI, data = data,
+         control = gamlss.control(trace = F))
+}
+gera_residuos <- function(data, fit){
+    tibble(data,
+            res_qnt = residuals(fit),
+            res_dev = residuals(fit, "mu"))
+}
 
-res <- tibble(dat,
-              res_qnt = residuals(fit1),
-              res_dev = residuals(fit1, "mu"))
+f1 <- y ~ x
 
-res |> ggplot(aes(x = x, y = res_dev)) + geom_point()
+data25 <- smp |> filter(n_sample == 25)
+fit25 <-  data25 |> ajusta_glm_bi(f1)
 
-res |> ggplot(aes(x = x, y = res_qnt)) + geom_point()
+data60 <- smp  |> filter(n_sample == 60)
+fit60 <- data60 |> ajusta_glm_bi(f1)
 
+res <- rbind(gera_residuos(data25, fit25),
+             gera_residuos(data60, fit60))
+
+res |> ggplot(aes(x = x, y = res_dev)) +
+  geom_point() + facet_wrap(~n_sample) +
+  labs(y = "Resíduos Componente da Desviância",
+       title = "Resíduos desviância - mod. linear simples") + theme_gray()
 ```
 
- - Ajustar modelo quadratico
- - envelope dos residuos
+Conforme elucidado pelos autores do artigo, no caso discreto os resíduos componente da desviância não permitem que as análises de resíduo sejam feitas da forma usual. O fato de nossa distribuição apresentar "saltos" pode acabar ocultando padrões inerentes.
 
+```{r res-qtn, out.height="40%"}
+res |> ggplot(aes(x = x, y = res_qnt)) +
+  geom_point() + facet_wrap(~n_sample) +
+  labs(y = "Resíduos de Quantil",
+       title = "Resíduos de quantil - mod. linear simples") + theme_gray()
+```
 
+Já os resíduos de quantil são uma forma de devolver a interpretação aos resíduos quando ajustamos modelos discretos. Notamos que os resíduos estão em forma de U, não estando uniformemente espalhados no entorno do zero, o que sugere algum padrão não captado pelo ajuste, conforme o esperado.
 
-## Parte 2 
+```{r qqplot1, out.height="40%"}
+res |> ggplot(aes(sample = res_qnt)) +
+  stat_qq() + stat_qq_line() +
+  facet_wrap(~n_sample) +
+  ggtitle("Q-Q plot - mod linear simples")
+```
+
+O QQPlot também é uma outra forma de visualizar se as pressuposições de nosso modelo em relação aos resíduos estão sendo satisfeitas. Um forte indicador do padrão quadrático pode ser notado aqui também, pois os resíduos estão distantes da linha identidade, especialmente nas caudas.
+
+### Envelope dos residuos
+
+O envelope dos resíduos também é outro meio gráfico prático para diagnóstico de modelo. Com o auxílio de simulações, ajustamos o modelo para verificar se os valores observados estão muito distantes do esperado sob as suposições realizadas.
+
+Adaptamos a implementação vista em aula para gerar os dados e o modelo da distribuição adequada ao problema.
+
+```{r env-simula, out.height="50%"}
+gera_envelope_BI <- function(dados, m1)
+{
+  # parametro da binomial
+  r <- 3
+  ## Número de simulações
+  B <- 100
+  rq <- resid(m1)
+  rqo <- sort(rq)
+
+    # Simulações
+  n <- length(dados$x)
+  mrq <- matrix(0, B, n)
+  for (b in 1:B) {
+    ysim_ <- rBI(n, r, m1$mu.fv)
+    ysim <- cbind(ysim_, r - ysim_)
+    msim <- gamlss(ysim ~ x, family = BI, data = dados,
+                   control = gamlss.control(trace = F))
+    rqs <- resid(msim)
+    mrq[b,] <- rqs
+  }
+  mrq <- t(apply(mrq, 1, sort))
+  Z <- qnorm((1:n - 3/8) / (n + 1/4))
+  rqm <- apply(mrq, 2, mean)
+  rq25 <- apply(mrq, 2, function(x) quantile(x, 0.025))
+  rq975 <- apply(mrq, 2, function(x) quantile(x, 0.975))
+  mrq <- tibble(Z, rqo, rq25, rqm, rq975)
+
+  # Envelope
+  mrq |> ggplot(aes(x = Z)) +
+  geom_ribbon(aes(ymin = rq25, ymax = rq975),
+            alpha = .60, fill = "lightblue") +
+  geom_point(aes(y = rqo)) +
+  geom_line(aes(y = rqm), lty = 2, color = "red") +
+  labs(x = "Quantis N(0,1)",
+       y = "Resíduos de quantil \n e envelope simulado",
+       title = paste0("Envelope dos resíduos (n = ", n,")"))+
+  theme_gray()
+ }
+```
+
+```{r env1, out.height="50%"}
+p1 <-  data25 |> gera_envelope_BI(fit25)
+p2 <-  data60 |> gera_envelope_BI(fit60)
+grid.arrange(p1,p2, ncol = 2)
+```
+
+Se o modelo adotado oferecer um bom ajuste aos dados, é esperado que os resíduos de quantil fiquem dentro da banda gerada pelas simulações.
+
+No caso de nosso modelo, vemos diversos valores fora delas, o que indica um mau ajuste, conforme o esperado. Na próxima sessão faremos o ajuste de um modelo quadrático para comparar.
+
+### Ajuste ao modelo quadratico
+
+Vamos ajustar um modelo quadrático aos dados gerados, e repetir os passos anteriores de nossa análise a fim de verificar o bom ajuste do modelo.
+
+```{r qd-fit}
+f2 <- y ~ poly(x,2)
+
+fitq25 <-  ajusta_glm_bi(data25, f2)
+fitq60 <- ajusta_glm_bi(data60, f2)
+
+res <- rbind(gera_residuos(data25, fitq25),
+             gera_residuos(data60, fitq60))
+
+res |> ggplot(aes(x = x, y = res_dev)) +
+  geom_point() + facet_wrap(~n_sample) +
+  labs(y = "Resíduos Componente da Desviância",
+              title = "Resíduos desviância - mod. quadrático") + theme_gray()
+```
+
+Notamos um padrão diferente agora nos resíduos componente da desviância, contudo tal comportamento é mera curiosidade, pois continua a não ser útil em nossa análise residual.
+
+```{r res-qtn-2, out.height="40%"}
+res |> ggplot(aes(x = x, y = res_qnt)) +
+  geom_point() + facet_wrap(~n_sample) +
+  labs(y = "Resíduos de Quantil",
+       title = "Resíduos quantil - mod. quadrático") + theme_gray()
+```
+
+Notamos agora que os valores aparentam estar mais espalhados aleatóriamente em torno do zero, sem sugerir nenhum tipo de padrão.
+
+```{r qqplot2, out.height="40%"}
+res |> ggplot(aes(sample = res_qnt)) +
+  stat_qq() + stat_qq_line() +
+  facet_wrap(~n_sample) +
+  ggtitle("Q-Q plot - mod quadrático")
+```
+
+O QQ-plot agora também está mais próximo de uma linha reta, conforme o esperado sob a hipótese de um bom ajuste do modelo.
+
+```{r env2, out.height="50%"}
+p1 <-  data25 |> gera_envelope_BI(fitq25)
+p2 <-  data60 |> gera_envelope_BI(fitq60)
+
+grid.arrange(p1, p2, ncol = 2)
+```
+
+Agora, vemos que os valores ficaram dentro das bandas, aparentemente aleatoriamente distribuídos em torno da diagonal. Vemos que o polinomio quadrático ofereceu um bom ajuste, conforme o esperado, pois os dados foram gerados dessa maneira.
+
+## Parte 2
 
 Utilizando dados de um estudo prospectivo com 100 idosos em boa condição física, vamos ajustar um modelo a fim de tentar relacionar o número de quedas de um paciente com as variaveis explicativas presentes em nosso conjunto de dados, a se saber:
 
-   - `ìntervencao`: houveram exercícios físicos junto à educação(0=não, 1=sim),
-   - `sexo`: 0= feminino, 1= masculino,
-   - `balanco`: escore de balanço de um indivíduo, 
-   - `forca`: escore de força de um indivído.
-
+- `ìntervencao`: houveram exercícios físicos junto à educação(0=não, 1=sim),
+- `sexo`: 0= feminino, 1= masculino,
+- `balanco`: escore de balanço de um indivíduo,
+- `forca`: escore de força de um indivído.
 
 ```{r part2}
 df2 <- read.table("geriatra.dat")
@@ -96,8 +244,7 @@ colnames(df2) <- c("quedas", "intervencao", "sexo", "balanco", "forca")
 
 A primeira etapa de nossa análise é exploratória. Vamos verificar o comportamento das variáveis em nosso conjunto de dados. As variáveis `sexo` e `intervencao` são binárias, enquanto que as outras são quantitativas discretas.
 
-
-```{r EDA-1, fig.cap = "Gráfico de barras com a contagem da variável resposta", out.height = "80%" }
+```{r EDA-1, out.height = "50%" }
 df2 |> ggplot(aes(x = quedas)) +
 #  geom_dotplot(binwidth =  0.5) +
   geom_bar(stat = "count") +
@@ -106,26 +253,16 @@ df2 |> ggplot(aes(x = quedas)) +
   theme_light()
 ```
 
-Através do gráfico de barras da figura acima, aparentemente a distribuição de Poisson faz sentido para os dados, devido à distribuição da variável resposta ser positiva discreta. 
+Através do gráfico de barras da figura acima, aparentemente a distribuição de Poisson faz sentido para os dados, devido à distribuição da variável resposta ser positiva discreta.
 
 Utilizando o pacote `gamlss`, definimos a função de ligação de nosso modelo como sendo a função `log`.
 
 Da mesma forma, uma primeira tentativa seria ajustar uma distribuição de Poisson para a resposta. Entretanto, devemos, via análise de resíduos, verificar se nossa suposição é válida, pois para uma distribuição de Poisson, a média e a variância devem ser iguais.
 
-
-
 ```{r model-fit}
 fit2 <- gamlss(quedas ~ ., family = PO(), data = df2)
 summary(fit2)
 ```
-
-
-```{r model-fit3}
-fit4 <- gamlss(quedas ~ ., family = NBI(), data = df2)
-summary(fit4)
-```
-
-
 
 Utilizando o AIC como critério de seleção de modelos, faremos uma seleção de variáveis backward.
 
@@ -133,9 +270,66 @@ Utilizando o AIC como critério de seleção de modelos, faremos uma seleção d
 m1 <- stepGAIC(fit2)
 ```
 
-Nossa seleção backwards removeu a variável `sexo` do modelo de Poisson, pois a variável foi rejeitada no teste de hipóteses anteriormente realizado pelo sumário do modelo como sendo não importante para explicar a variabilidade da variável resposta.
+Nossa seleção backwards removeu a variável `sexo` do modelo de Poisson, o que era esperado, pois a variável foi rejeitada no teste de hipóteses anteriormente realizado pelo sumário do modelo.
 
 Dessa forma, o número médio de quedas aparenta ser independente em relação ao sexo do paciente. Portanto, o sexo não parece interferir no número médio de quedas de um paciente.
 
+### Diagnóstico do modelo
+
+Agora que finalizamos a etapa de seleção de atributos, vamos verificar graficamente se as suposições sob um bom ajuste estão sendo satisfeitas.
+
+vamos direto para o envelope dos resíduos.
+
+```{r env-poiss, out.height="50%"}
+# parametro da binomial
+r <- 3
+## Número de simulações
+B <- 100
+rq <- resid(m1)
+rqo <- sort(rq)
+
+  # Simulações
+n <- length(df2$quedas)
+mrq <- matrix(0, B, n)
+for (b in 1:B) {
+  ysim <- rPO(n, m1$mu.fv)
+  msim <- gamlss(ysim ~ . - sexo, family = PO, data = df2,
+                 control = gamlss.control(trace = F))
+  rqs <- resid(msim)
+  mrq[b,] <- rqs
+}
+mrq <- t(apply(mrq, 1, sort))
+Z <- qnorm((1:n - 3/8) / (n + 1/4))
+rqm <- apply(mrq, 2, mean)
+rq25 <- apply(mrq, 2, function(x) quantile(x, 0.025))
+rq975 <- apply(mrq, 2, function(x) quantile(x, 0.975))
+mrq <- tibble(Z, rqo, rq25, rqm, rq975)
+
+# Envelope
+mrq |> ggplot(aes(x = Z)) +
+geom_ribbon(aes(ymin = rq25, ymax = rq975),
+          alpha = .60, fill = "lightblue") +
+geom_point(aes(y = rqo)) +
+geom_line(aes(y = rqm), lty = 2, color = "red") +
+labs(x = "Quantis N(0,1)",
+     y = "Resíduos de quantil \n e envelope simulado",
+     title = paste0("Envelope dos resíduos (n = ", n,")"))+
+theme_gray()
+
+```
+
+### Interpretação
+
+Apresentamos o sumário do modelo abaixo. Lembrando que a função de ligação é a $\log$, podemos interpretar diretamente os coeficientes ao aplicar a transformação inversa, ou seja, tomamos o exponencial de cada um dos coeficientes para verificar seu impacto na média.
+
+```{r summm}
+summary(m1)
 
 
+exp(m1$mu.coefficients)
+
+```
+
+A Intervenção, por ter um coeficiente negativo, pode ser encarada como um fator protetivo. Assim, indivíduos que realizaram a intervenção têm em média uma redução de 66% $(1 - 0,34)$ no número de quedas, com todo o resto constante.
+
+Já para cada aumento unitário na força, com todo o resto mantido constante, temos um aumento de 0,9% no número de quedas. A interpretação para o score de balanço é análoga. Assim, um aumento individual em qualquer um dos dois escores (balanço ou força) aumenta a média de quedas, com tudo mais constante.
