@@ -37,7 +37,7 @@ Vamos gerar duas amostras aleatórias de forma similar à utilizada pelos autore
 
 A variável explicativa foi gerada como sendo pertencente a uma distribuição Uniforme. Transformamos esse valor em uma probabilidade através da implementação descrita abaixo.
 
-```{r gen-bin, out.height="50%"}
+```{r gen-bin, out.height="30%"}
 # inversa da logito
 logito_inv <- (function(x) exp(x) / (1 + exp(x)))
 
@@ -68,7 +68,7 @@ smp |> ggplot(aes(x = x, y = y)) +
 
 Com auxílio do pacote `gamlss`, vamos ajustar um modelo logístico de resposta binomial (a ligação logística é o _default_) para obter os respectivos resíduos do modelo.
 
-```{r sim-fit, out.height = "40%" }
+```{r sim-fit, out.height = "30%" }
 # a variavel resposta deve ser uma matriz com duas
 # colunas, o numero de sucessos e o numero de fracassos
 # de cada valor simulado.
@@ -104,7 +104,7 @@ res |> ggplot(aes(x = x, y = res_dev)) +
 
 Conforme elucidado pelos autores do artigo, no caso discreto os resíduos componente da desviância não permitem que as análises de resíduo sejam feitas da forma usual. O fato de nossa distribuição apresentar "saltos" pode acabar ocultando padrões inerentes.
 
-```{r res-qtn, out.height="40%"}
+```{r res-qtn, out.height="30%"}
 res |> ggplot(aes(x = x, y = res_qnt)) +
   geom_point() + facet_wrap(~n_sample) +
   labs(y = "Resíduos de Quantil",
@@ -113,7 +113,7 @@ res |> ggplot(aes(x = x, y = res_qnt)) +
 
 Já os resíduos de quantil são uma forma de devolver a interpretação aos resíduos quando ajustamos modelos discretos. Notamos que os resíduos estão em forma de U, não estando uniformemente espalhados no entorno do zero, o que sugere algum padrão não captado pelo ajuste, conforme o esperado.
 
-```{r qqplot1, out.height="40%"}
+```{r qqplot1, out.height="30%"}
 res |> ggplot(aes(sample = res_qnt)) +
   stat_qq() + stat_qq_line() +
   facet_wrap(~n_sample) +
@@ -128,7 +128,7 @@ O envelope dos resíduos também é outro meio gráfico prático para diagnósti
 
 Adaptamos a implementação vista em aula para gerar os dados e o modelo da distribuição adequada ao problema.
 
-```{r env-simula, out.height="50%"}
+```{r env-simula, out.height="30%"}
 gera_envelope_BI <- function(dados, m1)
 {
   # parametro da binomial
@@ -169,7 +169,7 @@ gera_envelope_BI <- function(dados, m1)
  }
 ```
 
-```{r env1, out.height="50%"}
+```{r env1, out.height="30%"}
 p1 <-  data25 |> gera_envelope_BI(fit25)
 p2 <-  data60 |> gera_envelope_BI(fit60)
 grid.arrange(p1,p2, ncol = 2)
@@ -200,7 +200,7 @@ res |> ggplot(aes(x = x, y = res_dev)) +
 
 Notamos um padrão diferente agora nos resíduos componente da desviância, contudo tal comportamento é mera curiosidade, pois continua a não ser útil em nossa análise residual.
 
-```{r res-qtn-2, out.height="40%"}
+```{r res-qtn-2, out.height="30%"}
 res |> ggplot(aes(x = x, y = res_qnt)) +
   geom_point() + facet_wrap(~n_sample) +
   labs(y = "Resíduos de Quantil",
@@ -209,7 +209,7 @@ res |> ggplot(aes(x = x, y = res_qnt)) +
 
 Notamos agora que os valores aparentam estar mais espalhados aleatóriamente em torno do zero, sem sugerir nenhum tipo de padrão.
 
-```{r qqplot2, out.height="40%"}
+```{r qqplot2, out.height="30%"}
 res |> ggplot(aes(sample = res_qnt)) +
   stat_qq() + stat_qq_line() +
   facet_wrap(~n_sample) +
@@ -218,7 +218,7 @@ res |> ggplot(aes(sample = res_qnt)) +
 
 O QQ-plot agora também está mais próximo de uma linha reta, conforme o esperado sob a hipótese de um bom ajuste do modelo.
 
-```{r env2, out.height="50%"}
+```{r env2, out.height="30%"}
 p1 <-  data25 |> gera_envelope_BI(fitq25)
 p2 <-  data60 |> gera_envelope_BI(fitq60)
 
@@ -244,7 +244,7 @@ colnames(df2) <- c("quedas", "intervencao", "sexo", "balanco", "forca")
 
 A primeira etapa de nossa análise é exploratória. Vamos verificar o comportamento das variáveis em nosso conjunto de dados. As variáveis `sexo` e `intervencao` são binárias, enquanto que as outras são quantitativas discretas.
 
-```{r EDA-1, out.height = "50%" }
+```{r EDA-1, out.height = "20%" }
 df2 |> ggplot(aes(x = quedas)) +
 #  geom_dotplot(binwidth =  0.5) +
   geom_bar(stat = "count") +
@@ -276,11 +276,25 @@ Dessa forma, o número médio de quedas aparenta ser independente em relação a
 
 ### Diagnóstico do modelo
 
-Agora que finalizamos a etapa de seleção de atributos, vamos verificar graficamente se as suposições sob um bom ajuste estão sendo satisfeitas.
+Finalizada a etapa de seleção de atributos, vamos verificar se as suposições sob um bom ajuste do modelo estão sendo satisfeitas.
 
-vamos direto para o envelope dos resíduos.
+#### Parâmetro de dispersão
 
-```{r env-poiss, out.height="50%"}
+Calculamos $\phi$ como a desviância residual dividida pelos graus de liberdade do modelo. Como estamos utilizando um modelo de Poisson, sob a hipótese de um bom ajuste é esperado que o parâmetro de dispersão esteja próximo de 1.
+
+```{r phi}
+# desviancia / gl
+m1$G.deviance/m1$df.residual
+
+```
+
+```{r scatter-residuals}
+plot(m1)
+```
+
+Vamos plotar o envelope dos resíduos.
+
+```{r env-poiss, out.height="30%"}
 # parametro da binomial
 r <- 3
 ## Número de simulações
@@ -320,7 +334,7 @@ theme_gray()
 
 ### Interpretação
 
-Apresentamos o sumário do modelo abaixo. Lembrando que a função de ligação é a $\log$, podemos interpretar diretamente os coeficientes ao aplicar a transformação inversa, ou seja, tomamos o exponencial de cada um dos coeficientes para verificar seu impacto na média.
+Apresentamos os coeficientes de cada um dos preditores do modelo no sumário abaixo. Lembrando que a função de ligação é a $\log$, podemos interpretar diretamente os coeficientes ao aplicar a transformação inversa, ou seja, tomamos o exponencial de cada um dos coeficientes para verificar seu impacto na média.
 
 ```{r summm}
 summary(m1)
