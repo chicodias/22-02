@@ -1,0 +1,293 @@
+---
+title: "Lista 4 - Análise Multivariada"
+author: "Francisco Rosa Dias de Miranda - 4402962"
+date: "Dez 2022"
+output:
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+#global settings on kniting
+knitr::opts_chunk$set(echo = TRUE) # decide on showing code AND results on final file
+knitr::opts_chunk$set(warning = FALSE) # warnings appearing or not on final file
+knitr::opts_chunk$set(message = FALSE) # message appearing or not on final file
+# bibliotecas utilizadas neste trabalho
+library(tidyverse)
+library(GGally)
+library(knitr)
+library(dplyr)
+library(Hmisc)
+library(ggplot2)
+ library("FactoMineR")
+library("factoextra")
+```
+
+\centering
+\raggedright
+\tableofcontents
+
+###### Observação: Foi considerado um nível de significância de 5%, exceto quando especificado.
+
+\newpage
+
+## Lista 4: Exercício 2
+
+A continuação dos resultados de um experimento planejado envolvendo uma reação química. As variáveis de entrada (independentes) são:
+
+- $x_1$: temperatura
+- $x_2$: concentração
+- $x_3$: tempo
+
+As variáveis de rendimento (dependentes) são:
+
+- $y_1$ : porcentagem de material de partida inalterado
+- $y_2$ : porcentagem convertida no produto desejado
+- $y_3$ : porcentagem de subprodutos indesejados
+
+```{r reacao init}
+reacao<-read_delim("data/chemical_reaction.csv",delim = ";", show_col_types = F )
+
+kable(reacao[1:10,],caption = 'Recorte dos Resultados do Experimentos')
+```
+
+### (a) Estimativa de quadrados mínimos dos coeficientes de regressão
+
+As estimativas de mínimos quadrados são dadas por
+
+$$\boldsymbol{\beta} = (\boldsymbol{Z}^T \cdot \boldsymbol{Z})^{-1} \cdot (\boldsymbol{Z}^{T} \cdot \boldsymbol{Y})$$
+
+Por conveniência, podemos usar a implementação em linguagem R através do método `lm`.
+
+```{r}
+Y <- as.matrix(reacao[,c('y1','y2','y3')])
+fit1 <- lm(Y ~ x1 + x2 + x3, data=reacao)
+fit1
+```
+
+O método fornece-nos como saída a matriz dos coeficientes de regressão para cada um dos $Y_{i}$ dado $X_{j}$ de nosso modelo.
+
+### (b) Suposições do modelo de regressão
+
+Suposições:
+
+- O erro tem média zero e variância $\sigma^2$ desconhecida.
+
+- Erros são não-correlacionados
+
+- Os erros têm distribuição normal
+
+- As variáveis explicativas $X_1, ..., X_n$ são controladas pelo experimentador e medidas com erro insignificante.
+
+Primeiramente, obtenhamos as estimativas para a média dos resíduos de cada um dos $Y_i$.
+
+```{r}
+1:3 |> map_dbl(~mean(fit1$residuals[,.]))
+```
+
+Conforme o esperado quando o modelo faz um bom ajuste aos dados, temos as médias dos resíduos de cada uma das variáveis resposta próximas de zero.
+
+```{r}
+cor(fit1$residuals)
+```
+
+Com as estimativas dos coeficientes de correlação de Pearson, vemos que $Y_2$ e $Y_3$ possuem alta correlação inversa ($-0.74$).
+
+Contudo, as correlações entre $(Y_{1}, Y_{2})$ e $(Y_{1}, Y_{3})$ são menores, o que favorece a suposição inicial das variáveis não serem correlacionadas.
+
+### (c) Significância da regressão geral
+
+Aqui, nossa hipótese nula para os quatro testes é que a matriz de coeficientes do modelo é a matriz nula.
+
+```{r}
+anova(fit1, test='Wilks')
+```
+
+```{r}
+anova(fit1, test='Pillai')
+```
+
+```{r}
+anova(fit1, test='Hotelling-Lawley')
+```
+
+```{r}
+anova(fit1, test='Roy')
+```
+
+Os quatro testes rejeitam $H_0$ a um nível de significância de 5% para todos os coeficientes testados.
+
+Dessa forma, todas as covariáveis que testamos são importantes para explicar fontes de variação dos dados, de acordo com as diferentes metodologias utilizadas..
+
+\newpage
+
+## Lista 5: Exercício 5
+
+O conjunto de dados de flores Iris (originalmente apresentados em Fisher, R. A.1936), fornece as medidas em centímetros das variáveis: comprimento e largura da sépala e comprimento e largura da pétala, para 50 flores de cada uma das 3 espécies de íris.
+
+As espécies são íris setosa, versicolor e virgínica. Vamos realizar uma análise de componentes principais.
+
+```{r iris init}
+data = iris[,1:4]
+head(data)
+```
+
+```{r}
+ggpairs(iris, columns = 1:4, aes(color = Species))
+```
+
+```{r}
+apply(data,2,sd)
+```
+
+```{r}
+boxplot(data)
+```
+
+As variáveis têm variâncias muito diferentes. Dessa forma, padronizamos os dados para que tenham média 0 e variância 1.
+
+A utilização da mesma escala também permite que comparemos diretamente cada um dos atributos presentes em nosso conjunto de dados.
+
+```{r}
+data.scaled = scale(data, center = T, scale = T)
+apply(data.scaled, 2, sd)
+Sigma = cov(data.scaled)
+round(Sigma,2)
+```
+
+```{r}
+Eigen = eigen(Sigma)
+Eigenvectors <- Eigen$vectors
+colnames(Eigenvectors) <- paste0("CP", 1:4)
+rownames(Eigenvectors) <- colnames(data)
+Eigenvectors
+```
+
+### (a) Componentes principais
+
+Primeiramente, analisamos o gráfico de componentes principais a fim de escolher o número de componentes principais.
+
+```{r pca}
+pca_fit <- PCA(data, scale.unit = TRUE, graph =T, ncp = 2)
+```
+
+Vemos que as duas primeiras dimensões resumem 95% da inércia total (a inércia é a variância total do dataset i.e. o traço da matriz de correlação).
+
+```{r}
+ggcorr(data)
+```
+
+É interessante notar também que três das covariáveis são altamente correlacionadas, o que contribui para explicar o fato de que podemos descartar algumas delas, por não agregarem mais explicações ao modelo.
+
+```{r eigval}
+get_eigenvalue(pca_fit)
+```
+
+```{r screeplot}
+fviz_eig(pca_fit, addlabels = TRUE)
+```
+
+A função `dimdesc()` calcula o coeficiente de correlação entre uma variável em uma dimensão e faz um teste de significância.
+
+```{r dimdesc}
+dimdesc(pca_fit, axes=c(1,2))
+```
+
+Escolhemos somente às duas primeiras componentes principais, que são responsáveis por explicar cerca de 95% da variância.
+
+### (b) Interprete a(s) componente(s) obtida(s)
+
+Os autovetores representam as direções dos eixos das componentes principais, que definem a contribuição de cada combinação linear da variável para a componente principal.
+
+```{r}
+Eigenvectors
+```
+
+### (c) Grupo entre as variáveis
+
+A partir da representação gráfica do escore da primeira CP em relação escore da segunda CP e veja se podemos descobrir algum grupo entre as espécies.
+
+```{r}
+library(ggfortify)
+pca_res <- prcomp(data, scale. = TRUE)
+autoplot(pca_res, data = iris, colour = 'Species',
+         loadings = TRUE, loadings.colour = 'blue',
+         loadings.label = TRUE, loadings.label.size = 3)
+```
+
+\newpage
+
+## Lista 6: Exercício 1
+
+Os dados a continuação são referentes a estimativas do consumo médio de proteínas de diferentes fontes de alimentos para os habitantes de 25 países europeus como publicado por Weber (1973).
+
+```{r protein init}
+protein <- read.csv("data/protein.csv")
+kable(head(protein),caption = 'Protein Dataset')
+```
+
+### (a) Componentes pricipais
+
+Utilizando um conjunto de dados sobre consumo de proteína de 10 diferentes de alimento para os habitantes de 25 países europeus, vamos realizar uma análise de componentes principais para investigar o relacionamento entre os países com base nestas variáveis.
+
+```{r}
+data <- protein[,2:10]
+pca_res <- prcomp(data, scale. = TRUE)
+autoplot(pca_res, data = protein,
+         loadings = TRUE, loadings.colour = 'blue', label = TRUE,
+         loadings.label = TRUE, loadings.label.size = 3, label.label='country')
+```
+
+```{r}
+pca_fit <- PCA(data, scale.unit = TRUE, graph =F)
+fviz_eig(pca_fit, addlabels = TRUE)
+
+```
+
+Em nossa análise, buscamos identificar fatores importantes descritos pelas variáveis observadas, para investigar o relacionamento entre os países com respeito aos fatores.
+
+\newpage
+
+## Lista 7: Exercício 11.24
+
+Dados financeiros anuais são coletados para firmas em falência e financeiramente estáveis, por aproximadamente 2 anos.
+
+- X1 = CF/TD = (cash flow)/(total debt)
+- X2 = NI/TA = (net income)/(total assets)
+- X3 = CA/CL = (current assets)/(current liabilities)
+- X4 = CA/NS = (current assets)/(net sales)
+- pop:
+  - 0: bankrupt firms
+  - 1: non bankrupt firms.
+
+```{r bankrupt init}
+bank<-read.csv("data/bankruptcy.csv")
+kable(bank[1:5,],caption = 'Recorte bankruptcy Dataset')
+```
+
+### (a) Plot dos pares
+
+Utilizando um símbolo diferente para
+Using a different symbol for each group, plot the data for the pairs of observations (xl,x2), (x1,x3) and (x1,x4). Does it appear as if the data are approximately bivariate normal for any of these pairs of variables?
+
+```{r pairplots}
+ggpairs(bank,aes(color = as_factor(population)), 2:5)
+```
+
+### (b) Vetor de médias amostrais
+
+Vamos agora calcular os vetores de médias e covariâncias observados, com os $n_1 = 21$ pares de observação (x1, x2) para empresas falidas e $n_2 = 25$ pares (x1, x2) de empresas que não faliram.
+
+```{r}
+# vetor de medias
+bank |> group_by(population) |>
+  summarise_all(mean)
+
+# matrizes de covariancia
+# populacao = 0
+bank[1:21,2:5] |> cov()
+
+# populacao == 1
+bank[22:44,2:5] |> cov()
+```
